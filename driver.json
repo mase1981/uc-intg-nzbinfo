@@ -1,0 +1,297 @@
+{
+    "driver_id": "uc_intg_nzbinfo",
+    "version": "0.1.0",
+    "min_core_api": "0.21.0",
+    "name": {
+        "en": "NZB Info Manager"
+    },
+    "description": {
+        "en": "Monitor and control newsgroup applications like SABnzbd, NZBget, Sonarr, Radarr, Lidarr, Readarr, Bazarr, and Overseerr"
+    },
+    "developer": {
+        "name": "Meir Miyara",
+        "email": "meir.miyara@gmail.com",
+        "url": "https://github.com/mase1981"
+    },
+    "home_page": "https://github.com/mase1981/uc-intg-nzbinfo",
+    "documentation": "https://github.com/mase1981/uc-intg-nzbinfo/blob/main/README.md",
+    "setup_data_schema": {
+        "title": {
+            "en": "NZB Media Manager Setup"
+        },
+        "settings": [
+            {
+                "id": "sabnzbd_enabled",
+                "label": {
+                    "en": "Enable SABnzbd - Usenet Client"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "sabnzbd_host",
+                "label": {
+                    "en": "SABnzbd Host:Port (e.g., 192.168.1.100:8080)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "sabnzbd_api",
+                "label": {
+                    "en": "SABnzbd API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "nzbget_enabled",
+                "label": {
+                    "en": "Enable NZBget - Usenet Client"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "nzbget_host",
+                "label": {
+                    "en": "NZBget Host:Port (e.g., 192.168.1.100:6789)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "nzbget_api",
+                "label": {
+                    "en": "NZBget API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "sonarr_enabled",
+                "label": {
+                    "en": "Enable Sonarr - TV Series Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "sonarr_host",
+                "label": {
+                    "en": "Sonarr Host:Port (e.g., 192.168.1.100:8989)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "sonarr_api",
+                "label": {
+                    "en": "Sonarr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "radarr_enabled",
+                "label": {
+                    "en": "Enable Radarr - Movie Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "radarr_host",
+                "label": {
+                    "en": "Radarr Host:Port (e.g., 192.168.1.100:7878)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "radarr_api",
+                "label": {
+                    "en": "Radarr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "lidarr_enabled",
+                "label": {
+                    "en": "Enable Lidarr - Music Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "lidarr_host",
+                "label": {
+                    "en": "Lidarr Host:Port (e.g., 192.168.1.100:8686)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "lidarr_api",
+                "label": {
+                    "en": "Lidarr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "readarr_enabled",
+                "label": {
+                    "en": "Enable Readarr - Book Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "readarr_host",
+                "label": {
+                    "en": "Readarr Host:Port (e.g., 192.168.1.100:8787)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "readarr_api",
+                "label": {
+                    "en": "Readarr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "bazarr_enabled",
+                "label": {
+                    "en": "Enable Bazarr - Subtitle Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "bazarr_host",
+                "label": {
+                    "en": "Bazarr Host:Port (e.g., 192.168.1.100:6767)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "bazarr_api",
+                "label": {
+                    "en": "Bazarr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "overseerr_enabled",
+                "label": {
+                    "en": "Enable Overseerr - Request Manager"
+                },
+                "field": {
+                    "checkbox": {
+                        "value": false
+                    }
+                }
+            },
+            {
+                "id": "overseerr_host",
+                "label": {
+                    "en": "Overseerr Host:Port (e.g., 192.168.1.100:5055)"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            },
+            {
+                "id": "overseerr_api",
+                "label": {
+                    "en": "Overseerr API Key"
+                },
+                "field": {
+                    "text": {
+                        "value": ""
+                    }
+                }
+            }
+        ]
+    },
+    "release_date": "2025-01-20",
+    "icon": "uc:download",
+    "enabled": true,
+    "port": 9091,
+    "mdns": {
+        "name": "NZB Info Manager",
+        "mdns_type": "_uc-integration._tcp.local."
+    }
+}
