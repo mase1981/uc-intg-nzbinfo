@@ -56,17 +56,17 @@ jobs:
           sudo apt-get update && sudo apt-get install -y qemu-system-arm binfmt-support qemu-user-static
           docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           echo "Starting pyinstaller build"
-          docker run --rm --name builder \\
-            --platform=aarch64 \\
-            --user=$(id -u):$(id -g) \\
-            -v ${GITHUB_WORKSPACE}:/workspace \\
-            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \\
-            bash -c \\
-            "cd /workspace && \\
-              python -m pip install -r requirements.txt && \\
-              pyinstaller --clean --onedir --name intg-${DRIVER_ID} \\
-                --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \\
-                --collect-all zeroconf \\
+          docker run --rm --name builder \
+            --platform=aarch64 \
+            --user=$(id -u):$(id -g) \
+            -v ${GITHUB_WORKSPACE}:/workspace \
+            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
+            bash -c \
+            "cd /workspace && \
+              python -m pip install -r requirements.txt && \
+              pyinstaller --clean --onedir --name intg-${DRIVER_ID} \
+                --add-data uc_intg_${INTG_NAME}/icons:uc_intg_${INTG_NAME}/icons \
+                --collect-all zeroconf \
                 uc_intg_${INTG_NAME}/driver.py"
 
       - name: Verify build structure
