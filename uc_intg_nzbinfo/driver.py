@@ -43,6 +43,11 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
     if isinstance(action, SetupComplete):
         _LOG.info("Setup confirmed. Initializing integration components...")
         await _initialize_integration()
+
+        if _client:
+            if not await _client.connect():
+                _LOG.warning("Failed to connect to applications immediately after setup.")
+        
         if _media_player:
             await _media_player.push_update()
             await start_monitoring_loop()
@@ -55,8 +60,8 @@ async def _initialize_integration():
     global _client, _media_player
 
     _client = NZBInfoClient(_config)
-
     enabled_apps = _config.get_enabled_apps()
+
     if enabled_apps:
         _media_player = NZBInfoPlayer(_client, _config, api)
         api.available_entities.clear()
