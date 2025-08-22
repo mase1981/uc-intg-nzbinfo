@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uc-intg-nzbinfo"
-version = "0.1.7"
+version = "0.1.8"
 description = "NZB Info Manager Integration for Unfolded Circle Remote Two/3"
 authors = [
     {name = "Meir Miyara", email = "meir.miyara@gmail.com"}
