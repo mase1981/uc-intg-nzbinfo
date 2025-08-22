@@ -29,7 +29,7 @@ _monitoring_task: asyncio.Task | None = None
 
 async def setup_handler(msg: SetupAction) -> SetupAction:
     """Handle integration setup flow and create entities."""
-    global _config, _client, _media_player, _setup_manager
+    global _config, _setup_manager
 
     if not _config:
         _config = NZBInfoConfig()
@@ -49,12 +49,9 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
 
 
 async def _initialize_integration():
-    """Initialize the integration components - separated for reuse."""
+    """Initialize the integration components using the global config."""
     global _client, _media_player
 
-    if not _config:
-        _config = NZBInfoConfig()
-        
     _client = NZBInfoClient(_config)
 
     enabled_apps = _config.get_enabled_apps()
