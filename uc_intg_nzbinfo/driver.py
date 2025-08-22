@@ -1,5 +1,5 @@
 """
-NZB Info Manager Integration Driver - FIXED PERSISTENCE FOR REMOTE REBOOT.
+NZB Info Manager Integration Driver.
 
 :copyright: (c) 2025 by Meir Miyara.
 :license: MPL-2.0, see LICENSE for more details.
@@ -18,7 +18,6 @@ from uc_intg_nzbinfo.setup import NZBInfoSetup
 
 _LOG = logging.getLogger(__name__)
 
-# Global integration components
 api: ucapi.IntegrationAPI | None = None
 _config: NZBInfoConfig | None = None
 _client: NZBInfoClient | None = None
@@ -44,6 +43,9 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
     if isinstance(action, SetupComplete):
         _LOG.info("Setup confirmed. Initializing integration components...")
         await _initialize_integration()
+        if _media_player:
+            await _media_player.push_update()
+            await start_monitoring_loop()
 
     return action
 
@@ -57,9 +59,7 @@ async def _initialize_integration():
     enabled_apps = _config.get_enabled_apps()
     if enabled_apps:
         _media_player = NZBInfoPlayer(_client, _config, api)
-
         api.available_entities.clear()
-
         api.available_entities.add(_media_player)
         _LOG.info("NZB Info Manager entity created and available.")
     else:
@@ -69,21 +69,16 @@ async def _initialize_integration():
 
 
 async def _load_existing_configuration() -> bool:
-    """
-    Load existing configuration by creating a new config instance.
-    This is the robust way to ensure state is restored after a reboot.
-    """
+    """Load existing configuration and initialize entities."""
     global _config
     _LOG.info("Attempting to load existing configuration from disk...")
 
     _config = NZBInfoConfig()
-
     enabled_apps = _config.get_enabled_apps()
+
     if enabled_apps:
         _LOG.info(f"Found existing configuration with {len(enabled_apps)} enabled apps. Initializing...")
-        
         await _initialize_integration()
-
         if _client:
             if await _client.connect():
                 _LOG.info("Successfully connected to applications after config reload.")
@@ -105,22 +100,17 @@ async def start_monitoring_loop():
 
 
 async def on_connect() -> None:
-    """Handle Remote Two connection and restore state."""
+    """Handle Remote Two connection, restore state, and start monitoring."""
     _LOG.info("Remote Two connected. Setting device state to CONNECTED.")
     await api.set_device_state(DeviceStates.CONNECTED)
 
-    if not await _load_existing_configuration():
-        _LOG.info("Configuration not found. Integration is ready for setup.")
-
-
-async def on_subscribe_entities(entity_ids: list[str]):
-    """Handle entity subscriptions and start monitoring."""
-    _LOG.info(f"Entities subscribed: {entity_ids}. Pushing initial state.")
-
-    for entity_id in entity_ids:
-        if _media_player and entity_id == _media_player.id:
+    if await _load_existing_configuration():
+        _LOG.info("Configuration loaded. Pushing initial state and starting monitoring.")
+        if _media_player:
             await _media_player.push_update()
             await start_monitoring_loop()
+    else:
+        _LOG.info("Configuration not found. Integration is ready for setup.")
 
 
 async def on_disconnect() -> None:
@@ -132,10 +122,9 @@ async def on_disconnect() -> None:
     if _monitoring_task:
         _monitoring_task.cancel()
         _monitoring_task = None
-
     if _client and _client.is_connected:
         await _client.disconnect()
-    
+
     _client = None
     _media_player = None
 
@@ -144,7 +133,7 @@ async def main():
     """Main integration entry point."""
     global api
     logging.basicConfig(
-        level=logging.DEBUG, 
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     _LOG.info(f"Starting NZB Info Manager Integration v{ucapi.__version__}")
@@ -155,7 +144,6 @@ async def main():
 
         api.add_listener(Events.CONNECT, on_connect)
         api.add_listener(Events.DISCONNECT, on_disconnect)
-        api.add_listener(Events.SUBSCRIBE_ENTITIES, on_subscribe_entities)
 
         await api.init("driver.json", setup_handler)
         await api.set_device_state(DeviceStates.DISCONNECTED)
