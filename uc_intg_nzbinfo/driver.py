@@ -18,7 +18,6 @@ from uc_intg_nzbinfo.setup import NZBInfoSetup
 
 _LOG = logging.getLogger(__name__)
 
-# Global integration components
 api: ucapi.IntegrationAPI | None = None
 _config: NZBInfoConfig | None = None
 _client: NZBInfoClient | None = None
@@ -110,13 +109,20 @@ async def on_connect() -> None:
     """Handle Remote Two connection - FIXED PERSISTENCE."""
     _LOG.info("Remote Two connected. Setting device state to CONNECTED.")
     
+    if _media_player and api.available_entities.contains(_media_player.id):
+        _LOG.info("Entities already available from startup - setting device connected.")
+        await api.set_device_state(DeviceStates.CONNECTED)
+        return
+    
     config_loaded = await _load_existing_configuration()
 
     if config_loaded:
         _LOG.info("Successfully loaded existing configuration and created entities.")
+        # Set device state to connected since we have working config
         await api.set_device_state(DeviceStates.CONNECTED)
     else:
         _LOG.info("No existing configuration found. Setup required.")
+        # Set device state to connected, waiting for setup
         await api.set_device_state(DeviceStates.CONNECTED)
 
 
@@ -163,6 +169,13 @@ async def main():
 
         await api.init("driver.json", setup_handler)
         await api.set_device_state(DeviceStates.DISCONNECTED)
+
+        _LOG.info("Initializing entities before any connections...")
+        config_loaded = await _load_existing_configuration()
+        if config_loaded:
+            _LOG.info("Entities pre-loaded and available for immediate subscription.")
+        else:
+            _LOG.info("No configuration found - entities will be created during setup.")
 
         _LOG.info("Driver initialized. Waiting for remote connection and setup.")
         await asyncio.Future()
