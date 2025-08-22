@@ -18,12 +18,8 @@ from uc_intg_nzbinfo.setup import NZBInfoSetup
 
 _LOG = logging.getLogger(__name__)
 
-try:
-    loop = asyncio.get_running_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 API = ucapi.IntegrationAPI(loop)
 
 # Global integration components
