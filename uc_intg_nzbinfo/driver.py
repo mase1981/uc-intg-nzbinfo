@@ -1,5 +1,5 @@
 """
-NZB Info Manager Integration Driver - FIXED ENTITY PERSISTENCE FOR REMOTE REBOOT.
+NZB Info Manager Integration Driver - FIXED PERSISTENCE FOR REMOTE REBOOT.
 
 :copyright: (c) 2025 by Meir Miyara.
 :license: MPL-2.0, see LICENSE for more details.
@@ -86,10 +86,9 @@ async def _load_existing_configuration():
         if _client:
             if await _client.connect():
                 _LOG.info("Successfully connected to applications after config reload.")
-                return True
             else:
                 _LOG.warning("Failed to connect to applications, but entities created.")
-                return True  # Still return True since entities are created
+            return True
         return True
     else:
         _LOG.info("No existing configuration found or no apps enabled.")
@@ -118,11 +117,9 @@ async def on_connect() -> None:
 
     if config_loaded:
         _LOG.info("Successfully loaded existing configuration and created entities.")
-        # Set device state to connected since we have working config
         await api.set_device_state(DeviceStates.CONNECTED)
     else:
         _LOG.info("No existing configuration found. Setup required.")
-        # Set device state to connected, waiting for setup
         await api.set_device_state(DeviceStates.CONNECTED)
 
 
