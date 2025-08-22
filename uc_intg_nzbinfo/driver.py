@@ -28,7 +28,7 @@ _monitoring_task: asyncio.Task | None = None
 
 async def setup_handler(msg: SetupAction) -> SetupAction:
     """Handle integration setup flow and create entities."""
-    global _config, _setup_manager
+    global _config, _setup_manager, _media_player, _client
 
     if not _config:
         _config = NZBInfoConfig()
@@ -41,13 +41,12 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
         _setup_manager = None
 
     if isinstance(action, SetupComplete):
-        _LOG.info("Setup confirmed. Initializing integration components...")
-        await _initialize_integration()
-
-        if _client:
-            if not await _client.connect():
-                _LOG.warning("Failed to connect to applications immediately after setup.")
+        _LOG.info("Setup confirmed. Re-initializing integration components...")
         
+        # After setup, the config has changed, so we need to reload it
+        # and re-initialize everything, including creating a new media player instance.
+        await _load_existing_configuration()
+
         if _media_player:
             await _media_player.push_update()
             await start_monitoring_loop()
@@ -56,25 +55,30 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
 
 
 async def _initialize_integration():
-    """Initialize the integration components using the global config."""
+    """Initialize the integration's client and media player."""
     global _client, _media_player
-
+    
+    # This function now assumes _config and _media_player (the placeholder) already exist.
+    # It just creates the client and links it.
     _client = NZBInfoClient(_config)
-    enabled_apps = _config.get_enabled_apps()
+    
+    # Update the existing media player with the new client and config.
+    if _media_player:
+        _media_player._client = _client
+        _media_player._config = _config
+        # Re-initialize source list based on new config
+        enabled_apps = _config.get_enabled_apps()
+        source_list = ["System Overview"] + [
+            _media_player.APP_DISPLAY.get(app, {"name": app.title()})["name"] for app in enabled_apps
+        ] if enabled_apps else ["No Applications Configured"]
+        _media_player.attributes["source_list"] = source_list
+        _media_player.attributes["source"] = source_list[0]
 
-    if enabled_apps:
-        _media_player = NZBInfoPlayer(_client, _config, api)
-        api.available_entities.clear()
-        api.available_entities.add(_media_player)
-        _LOG.info("NZB Info Manager entity created and available.")
-    else:
-        api.available_entities.clear()
-        _media_player = None
-        _LOG.warning("No applications enabled, media player entity not created.")
+    _LOG.info("Integration components initialized.")
 
 
 async def _load_existing_configuration() -> bool:
-    """Load existing configuration and initialize entities."""
+    """Load existing configuration from disk."""
     global _config
     _LOG.info("Attempting to load existing configuration from disk...")
 
@@ -82,7 +86,7 @@ async def _load_existing_configuration() -> bool:
     enabled_apps = _config.get_enabled_apps()
 
     if enabled_apps:
-        _LOG.info(f"Found existing configuration with {len(enabled_apps)} enabled apps. Initializing...")
+        _LOG.info(f"Found existing configuration with {len(enabled_apps)} enabled apps.")
         await _initialize_integration()
         if _client:
             if await _client.connect():
@@ -92,6 +96,8 @@ async def _load_existing_configuration() -> bool:
         return True
     else:
         _LOG.info("No existing configuration found or no apps enabled. Setup is required.")
+        # Even with no config, we need to initialize to have a valid state
+        await _initialize_integration()
         return False
 
 
@@ -105,7 +111,7 @@ async def start_monitoring_loop():
 
 
 async def on_connect() -> None:
-    """Handle Remote Two connection, restore state, and start monitoring."""
+    """Handle Remote Two connection and restore state."""
     _LOG.info("Remote Two connected. Setting device state to CONNECTED.")
     await api.set_device_state(DeviceStates.CONNECTED)
 
@@ -115,12 +121,14 @@ async def on_connect() -> None:
             await _media_player.push_update()
             await start_monitoring_loop()
     else:
-        _LOG.info("Configuration not found. Integration is ready for setup.")
+        _LOG.info("Configuration not found. Pushing placeholder state.")
+        if _media_player:
+            await _media_player.push_update()
 
 
 async def on_disconnect() -> None:
     """Handle Remote Two disconnection."""
-    global _monitoring_task, _client, _media_player
+    global _monitoring_task, _client
     _LOG.info("Remote Two disconnected. Setting device state to DISCONNECTED.")
     await api.set_device_state(DeviceStates.DISCONNECTED)
 
@@ -131,14 +139,13 @@ async def on_disconnect() -> None:
         await _client.disconnect()
 
     _client = None
-    _media_player = None
 
 
 async def main():
     """Main integration entry point."""
-    global api
+    global api, _config, _media_player
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     _LOG.info(f"Starting NZB Info Manager Integration v{ucapi.__version__}")
@@ -146,6 +153,12 @@ async def main():
     try:
         loop = asyncio.get_running_loop()
         api = ucapi.IntegrationAPI(loop)
+
+        # Create a placeholder configuration and media player entity immediately.
+        # This resolves the race condition on initial connection.
+        _config = NZBInfoConfig()
+        _media_player = NZBInfoPlayer(None, _config, api)
+        api.available_entities.add(_media_player)
 
         api.add_listener(Events.CONNECT, on_connect)
         api.add_listener(Events.DISCONNECT, on_disconnect)
