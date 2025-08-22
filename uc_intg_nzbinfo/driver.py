@@ -18,8 +18,13 @@ from uc_intg_nzbinfo.setup import NZBInfoSetup
 
 _LOG = logging.getLogger(__name__)
 
-# Global integration components
-api: ucapi.IntegrationAPI | None = None
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+API = ucapi.IntegrationAPI(loop)
 _config: NZBInfoConfig | None = None
 _client: NZBInfoClient | None = None
 _media_player: NZBInfoPlayer | None = None
@@ -28,13 +33,12 @@ _monitoring_task: asyncio.Task | None = None
 
 
 async def setup_handler(msg: SetupAction) -> SetupAction:
-    """Handle integration setup flow and create entities."""
     global _config, _client, _media_player, _setup_manager
 
     if not _config:
         _config = NZBInfoConfig()
     if _setup_manager is None:
-        _setup_manager = NZBInfoSetup(_config, api)
+        _setup_manager = NZBInfoSetup(_config, API)
 
     action = await _setup_manager.handle_setup(msg)
 
@@ -49,57 +53,46 @@ async def setup_handler(msg: SetupAction) -> SetupAction:
 
 
 async def _initialize_integration():
-    """Initialize the integration components - separated for reuse."""
     global _config, _client, _media_player
 
     _client = NZBInfoClient(_config)
 
-    # Only create media player if we have enabled apps
     enabled_apps = _config.get_enabled_apps()
     if enabled_apps:
-        _media_player = NZBInfoPlayer(_client, _config, api)
+        _media_player = NZBInfoPlayer(_client, _config, API)
 
-        # Clear any existing entities first
-        api.available_entities.clear()
-
-        # Add the new entity
-        api.available_entities.add(_media_player)
+        API.available_entities.clear()
+        API.available_entities.add(_media_player)
         _LOG.info("NZB Info Manager entity created and available.")
     else:
         _LOG.warning("No applications enabled, media player entity not created.")
 
 
 async def _load_existing_configuration():
-    """Load existing configuration and initialize if valid - FIXED VERSION."""
     global _config, _client, _media_player
 
     _LOG.info("Attempting to load existing configuration...")
 
-    # Force config reload from file
     if not _config:
         _config = NZBInfoConfig()
     else:
-        # Reload config from file to get latest saved state
         _config._load_config()
 
-    # Check if we have a valid configuration with enabled apps
     enabled_apps = _config.get_enabled_apps()
     _LOG.info(f"Found enabled apps in config: {enabled_apps}")
 
     if enabled_apps:
         _LOG.info(f"Found existing configuration with {len(enabled_apps)} enabled apps. Initializing...")
 
-        # Initialize client and media player
         await _initialize_integration()
 
-        # Try to connect to applications immediately
         if _client:
             if await _client.connect():
                 _LOG.info("Successfully connected to applications after config reload.")
                 return True
             else:
                 _LOG.warning("Failed to connect to applications, but entities created.")
-                return True  # Still return True since entities are created
+                return True
         return True
     else:
         _LOG.info("No existing configuration found or no apps enabled.")
@@ -107,7 +100,6 @@ async def _load_existing_configuration():
 
 
 async def start_monitoring_loop():
-    """Start the monitoring task if not already running."""
     global _monitoring_task
     if _monitoring_task is None or _monitoring_task.done():
         if _client and _media_player:
@@ -115,27 +107,22 @@ async def start_monitoring_loop():
             _LOG.info("NZB Info monitoring task started.")
 
 
-@api.listens_to(Events.CONNECT)
+@API.listens_to(Events.CONNECT)
 async def on_connect() -> None:
-    """Handle Remote Two connection - FIXED PERSISTENCE."""
     _LOG.info("Remote Two connected. Setting device state to CONNECTED.")
-    await api.set_device_state(DeviceStates.CONNECTED)
+    await API.set_device_state(DeviceStates.CONNECTED)
 
-    # CRITICAL FIX: Always try to load existing configuration first
     config_loaded = await _load_existing_configuration()
 
     if config_loaded:
         _LOG.info("Successfully loaded existing configuration and created entities.")
-        # Set device state to connected since we have working config
-        await api.set_device_state(DeviceStates.CONNECTED)
+        await API.set_device_state(DeviceStates.CONNECTED)
     else:
         _LOG.info("No existing configuration found. Setup required.")
-        # Device stays connected, waiting for setup
 
 
-@api.listens_to(Events.SUBSCRIBE_ENTITIES)
+@API.listens_to(Events.SUBSCRIBE_ENTITIES)
 async def on_subscribe_entities(entity_ids: list[str]):
-    """Handle entity subscriptions and start monitoring."""
     _LOG.info(f"Entities subscribed: {entity_ids}. Pushing initial state.")
 
     for entity_id in entity_ids:
@@ -144,12 +131,11 @@ async def on_subscribe_entities(entity_ids: list[str]):
             await start_monitoring_loop()
 
 
-@api.listens_to(Events.DISCONNECT)
+@API.listens_to(Events.DISCONNECT)
 async def on_disconnect() -> None:
-    """Handle Remote Two disconnection."""
     global _monitoring_task
     _LOG.info("Remote Two disconnected. Setting device state to DISCONNECTED.")
-    await api.set_device_state(DeviceStates.DISCONNECTED)
+    await API.set_device_state(DeviceStates.DISCONNECTED)
 
     if _monitoring_task:
         _monitoring_task.cancel()
@@ -160,8 +146,7 @@ async def on_disconnect() -> None:
 
 
 async def main():
-    """Main integration entry point."""
-    global api
+    global _config
     logging.basicConfig(
         level=logging.DEBUG, 
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -169,11 +154,8 @@ async def main():
     _LOG.info(f"Starting NZB Info Manager Integration v{ucapi.__version__}")
 
     try:
-        loop = asyncio.get_running_loop()
-        api = ucapi.IntegrationAPI(loop)
-
-        await api.init("driver.json", setup_handler)
-        await api.set_device_state(DeviceStates.DISCONNECTED)
+        await API.init("driver.json", setup_handler)
+        await API.set_device_state(DeviceStates.DISCONNECTED)
 
         _LOG.info("Driver initialized. Waiting for remote connection and setup.")
         await asyncio.Future()
