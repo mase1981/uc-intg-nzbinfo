@@ -31,19 +31,6 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "DRIVER_ID=$(jq .driver_id -r driver.json)" >> $GITHUB_OUTPUT
 
-      - name: Verify icons directory exists
-        run: |
-          echo "Checking for icons directory..."
-          if [ -d "uc_intg_${INTG_NAME}/icons" ]; then
-            echo "Icons directory found:"
-            ls -la uc_intg_${INTG_NAME}/icons/
-          else
-            echo "ERROR: Icons directory not found at uc_intg_${INTG_NAME}/icons/"
-            echo "Creating placeholder icons directory..."
-            mkdir -p uc_intg_${INTG_NAME}/icons
-            echo "Placeholder icon" > uc_intg_${INTG_NAME}/icons/system_overview.png
-          fi
-
       - name: Build
         run: |
           sudo apt-get update && sudo apt-get install -y qemu-system-arm binfmt-support qemu-user-static
@@ -63,25 +50,15 @@ jobs:
                 --collect-all zeroconf \
                 --collect-all ucapi \
                 --collect-all ucapi_framework \
+                --hidden-import uc_intg_${INTG_NAME}.driver \
+                --hidden-import uc_intg_${INTG_NAME}.device \
+                --hidden-import uc_intg_${INTG_NAME}.config \
+                --hidden-import uc_intg_${INTG_NAME}.media_player \
+                --hidden-import uc_intg_${INTG_NAME}.sensor \
+                --hidden-import uc_intg_${INTG_NAME}.select \
+                --hidden-import uc_intg_${INTG_NAME}.setup_flow \
                 --paths . \
-                uc_intg_${INTG_NAME}/driver.py"
-
-      - name: Verify build structure
-        run: |
-          echo "Checking build output structure..."
-          ls -la dist/driver/
-          if [ -d "dist/driver/uc_intg_${INTG_NAME}" ]; then
-            echo "Integration package found in build:"
-            ls -la dist/driver/uc_intg_${INTG_NAME}/
-            if [ -d "dist/driver/uc_intg_${INTG_NAME}/icons" ]; then
-              echo "Icons successfully included in build:"
-              ls -la dist/driver/uc_intg_${INTG_NAME}/icons/
-            else
-              echo "WARNING: Icons directory not found in build output"
-            fi
-          else
-            echo "WARNING: Integration package directory not found in build"
-          fi
+                uc_intg_${INTG_NAME}/__init__.py"
 
       - name: Prepare artifacts
         shell: bash

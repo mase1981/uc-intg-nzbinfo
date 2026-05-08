@@ -1,247 +1,88 @@
 """
-NZB Info Manager Media Player Entity with optimized 2-row display.
+NZB Info media player entity.
 
 :copyright: (c) 2025 by Meir Miyara.
 :license: MPL-2.0, see LICENSE for more details.
 """
-import asyncio
+
 import base64
 import logging
 import os
-from typing import Callable
+from typing import Any
 
-from ucapi import IntegrationAPI, MediaPlayer, StatusCodes, entity
-from ucapi.media_player import Attributes, Commands, Features, States
+from ucapi import StatusCodes, media_player
+from ucapi_framework import MediaPlayerEntity
 
-from uc_intg_nzbinfo.client import NZBInfoClient
-from uc_intg_nzbinfo.config import NZBInfoConfig
+from uc_intg_nzbinfo.config import APP_DISPLAY, NZBInfoConfig
+from uc_intg_nzbinfo.device import NZBInfoDevice
 
 _LOG = logging.getLogger(__name__)
 
-class NZBInfoPlayer(MediaPlayer):
-    """A MediaPlayer entity representing NZB Info applications status with 2-row display."""
+FEATURES = [
+    media_player.Features.ON_OFF,
+    media_player.Features.SELECT_SOURCE,
+]
 
-    APP_DISPLAY = {
-        "sabnzbd": {"name": "SABnzbd", "icon": "sabnzbd.png"},
-        "nzbget": {"name": "NZBget", "icon": "nzbget.png"},
-        "sonarr": {"name": "Sonarr", "icon": "sonarr.png"},
-        "radarr": {"name": "Radarr", "icon": "radarr.png"},
-        "lidarr": {"name": "Lidarr", "icon": "lidarr.png"},
-        "readarr": {"name": "Readarr", "icon": "readarr.png"},
-        "bazarr": {"name": "Bazarr", "icon": "bazarr.png"},
-        "overseerr": {"name": "Overseerr", "icon": "overseerr.png"}
-    }
 
-    def __init__(self, client: NZBInfoClient, config: NZBInfoConfig, api: IntegrationAPI):
-        self._client = client
-        self._config = config
-        self._api = api
-        self._icon_cache = {}
-        
-        features = [
-            Features.ON_OFF,
-            Features.SELECT_SOURCE,
-        ]
+class NZBInfoMediaPlayer(MediaPlayerEntity):
 
-        source_list = []
-        enabled_apps = self._config.get_enabled_apps()
-        
-        if enabled_apps:
-            source_list.append("System Overview")
-        
-        for app_name in enabled_apps:
-            app_info = self.APP_DISPLAY.get(app_name, {"name": app_name.title()})
-            source_list.append(app_info["name"])
+    def __init__(self, device_config: NZBInfoConfig, device: NZBInfoDevice):
+        self._device = device
+        self._config = device_config
+        self._icon_cache: dict[str, str] = {}
 
-        if not source_list:
-            source_list = ["No Applications Configured"]
+        self._source_list = ["System Overview"]
+        for app in device_config.enabled_apps:
+            self._source_list.append(APP_DISPLAY.get(app, {}).get("name", app.title()))
 
+        entity_id = f"media_player.{device_config.identifier}"
         super().__init__(
-            identifier="nzb_info_monitor",
-            name="NZB Info Manager",
-            features=features,
-            attributes={
-                Attributes.STATE: States.ON,
-                Attributes.SOURCE_LIST: source_list,
-                Attributes.SOURCE: source_list[0] if source_list else "Overview",
-                Attributes.MEDIA_TITLE: "Initializing...",
-                Attributes.MEDIA_ARTIST: "Starting up...",
-                Attributes.MEDIA_ALBUM: "Please wait...",
-                Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("system_overview.png"),
+            entity_id,
+            device_config.name,
+            FEATURES,
+            {
+                media_player.Attributes.STATE: media_player.States.STANDBY,
+                media_player.Attributes.SOURCE: "",
+                media_player.Attributes.SOURCE_LIST: [],
+                media_player.Attributes.MEDIA_TITLE: "",
+                media_player.Attributes.MEDIA_ARTIST: "",
+                media_player.Attributes.MEDIA_IMAGE_URL: "",
             },
-            cmd_handler=self.handle_command
+            device_class=media_player.DeviceClasses.RECEIVER,
+            cmd_handler=self._handle_command,
         )
+        self.subscribe_to_device(device)
 
-    def _get_icon_base64(self, icon_filename: str) -> str:
-        """Get the base64 encoded icon data."""
-        if icon_filename in self._icon_cache:
-            return self._icon_cache[icon_filename]
-
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_dir = os.path.join(script_dir, "icons")
-        icon_path = os.path.join(icon_dir, icon_filename)
-        
-        fallback_icons = ["system_overview.png", "sabnzbd.png"]
-
-        if not os.path.exists(icon_path):
-            _LOG.warning(f"Icon not found: {icon_filename}")
-            for fallback in fallback_icons:
-                icon_path = os.path.join(icon_dir, fallback)
-                if os.path.exists(icon_path):
-                    _LOG.info(f"Using fallback icon: {fallback}")
-                    break
-            else:
-                _LOG.error("No fallback icons found in uc_intg_nzbinfo/icons/ directory")
-                return ""
-
-        try:
-            with open(icon_path, 'rb') as f:
-                icon_data = f.read()
-                base64_data = base64.b64encode(icon_data).decode('utf-8')
-                data_url = f"data:image/png;base64,{base64_data}"
-                self._icon_cache[icon_filename] = data_url
-                return data_url
-        except Exception as e:
-            _LOG.error(f"Failed to read icon {icon_path}: {e}")
-            return ""
-
-    def _get_source_image(self, source: str) -> str:
-        """Get the proper base64 image data for a given source."""
-        if source == "System Overview":
-            return self._get_icon_base64("system_overview.png")
-        
-        for app_name, app_info in self.APP_DISPLAY.items():
-            if app_info["name"] == source:
-                return self._get_icon_base64(app_info["icon"])
-        
-        return self._get_icon_base64("system_overview.png")
-
-    def _get_app_name_from_source(self, source: str) -> str:
-        """Get internal app name from display source name."""
-        for app_name, app_info in self.APP_DISPLAY.items():
-            if app_info["name"] == source:
-                return app_name
-        return ""
-
-    async def handle_command(self, entity_arg: entity.Entity, cmd_id: str, params: dict | None) -> StatusCodes:
-        """Handle commands for the media player entity."""
-        _LOG.debug(f"NZBInfoPlayer received command: {cmd_id}")
-        
-        if cmd_id == Commands.OFF:
-            self.attributes[Attributes.STATE] = States.STANDBY
-        elif cmd_id == Commands.ON:
-            self.attributes[Attributes.STATE] = States.ON
-        elif cmd_id == Commands.SELECT_SOURCE:
-            source = params.get("source")
-            if source:
-                self.attributes[Attributes.SOURCE] = source
-                self.attributes[Attributes.MEDIA_IMAGE_URL] = self._get_source_image(source)
-                _LOG.info(f"Switched monitoring view to: {source}")
-                
-                await self._force_state_update()
-                
-        elif cmd_id in [Commands.PLAY_PAUSE, Commands.SHUFFLE, Commands.REPEAT, Commands.STOP, 
-                       Commands.NEXT, Commands.PREVIOUS, Commands.VOLUME, Commands.VOLUME_UP, 
-                       Commands.VOLUME_DOWN, Commands.MUTE_TOGGLE]:
-            _LOG.debug(f"Ignoring unsupported media command '{cmd_id}' to prevent UI error.")
-            return StatusCodes.OK
-        else:
-            _LOG.warning(f"Unhandled command: {cmd_id}")
-            return StatusCodes.NOT_IMPLEMENTED
-        
-        await self.push_update()
-        return StatusCodes.OK
-
-    async def _force_state_update(self):
-        """Force an immediate state update after source change."""
-        try:
-            await self._client.update_all_statuses()
-            
-            current_source = self.attributes.get(Attributes.SOURCE, "System Overview")
-            
-            fresh_attrs = {
-                Attributes.STATE: States.ON,
-                Attributes.SOURCE_LIST: self.attributes[Attributes.SOURCE_LIST],
-                Attributes.SOURCE: current_source,
-            }
-            
-            if current_source == "System Overview":
-                await self._update_overview_display(fresh_attrs)
-            else:
-                await self._update_app_display_2row(current_source, fresh_attrs)
-            
-            self.attributes.update(fresh_attrs)
-            
-            if self._api.configured_entities.contains(self.id):
-                self._api.configured_entities.update_attributes(self.id, fresh_attrs)
-                
-        except Exception as e:
-            _LOG.error(f"Error in force state update: {e}")
-
-    async def run_monitoring(self):
-        """Periodically fetch data and update the entity."""
-        while True:
-            try:
-                await self.push_update()
-                await asyncio.sleep(10)
-            except asyncio.CancelledError:
-                _LOG.info("Monitoring task cancelled")
-                break
-            except Exception as e:
-                _LOG.error(f"Error in monitoring loop: {e}", exc_info=True)
-                await asyncio.sleep(30)
-
-    async def push_update(self):
-        """Fetches the latest data and pushes it to the API."""
-        if not self._api.configured_entities.contains(self.id):
-            return
-
-        if not await self._client.update_all_statuses():
-            error_attrs = {
-                Attributes.STATE: States.OFF,
-                Attributes.MEDIA_TITLE: "Connection Error", 
-                Attributes.MEDIA_ARTIST: "Unable to reach applications",
-                Attributes.MEDIA_ALBUM: "Check configuration",
-                Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("system_overview.png")
-            }
-            self.attributes.update(error_attrs)
-            self._api.configured_entities.update_attributes(self.id, error_attrs)
-            return
-
-        current_source = self.attributes.get(Attributes.SOURCE, "System Overview")
-        
-        attrs_to_update = {
-            Attributes.STATE: States.ON,
-            Attributes.SOURCE_LIST: self.attributes[Attributes.SOURCE_LIST],
-            Attributes.SOURCE: current_source,
-        }
-        
-        if current_source == "System Overview":
-            await self._update_overview_display(attrs_to_update)
-        else:
-            await self._update_app_display_2row(current_source, attrs_to_update)
-        
-        self.attributes.update(attrs_to_update)
-        self._api.configured_entities.update_attributes(self.id, attrs_to_update)
-        
-        _LOG.debug(f"Pushed display update for source: {current_source}")
-
-    async def _update_overview_display(self, attrs_to_update: dict):
-        """Update display for system overview."""
-        statuses = self._client.get_all_statuses()
-        
-        if not statuses:
-            attrs_to_update.update({
-                Attributes.MEDIA_TITLE: "No Applications",
-                Attributes.MEDIA_ARTIST: "No apps configured",
-                Attributes.MEDIA_ALBUM: "Add apps in setup",
-                Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("system_overview.png")
+    async def sync_state(self) -> None:
+        if not self._device.device_reachable:
+            self.update({
+                media_player.Attributes.STATE: media_player.States.OFF,
+                media_player.Attributes.SOURCE_LIST: self._source_list,
+                media_player.Attributes.SOURCE: "",
+                media_player.Attributes.MEDIA_TITLE: "Connection Error",
+                media_player.Attributes.MEDIA_ARTIST: "Unable to reach applications",
+                media_player.Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("system_overview.png"),
             })
             return
-        
-        online_count = sum(1 for status in statuses.values() if status.is_online)
-        total_count = len(statuses)
-        
+
+        attrs: dict[str, Any] = {
+            media_player.Attributes.STATE: media_player.States.ON,
+            media_player.Attributes.SOURCE_LIST: self._source_list,
+            media_player.Attributes.SOURCE: self._device.current_source,
+        }
+
+        if self._device.current_source == "System Overview":
+            self._build_overview(attrs)
+        else:
+            self._build_app_display(self._device.current_source, attrs)
+
+        self.update(attrs)
+
+    def _build_overview(self, attrs: dict) -> None:
+        statuses = self._device.get_all_statuses()
+        online = self._device.get_online_count()
+        total = self._device.get_total_count()
+
         priority_info = "All applications monitored"
         for app_name in ["sabnzbd", "nzbget", "sonarr", "radarr", "lidarr", "readarr"]:
             if app_name in statuses:
@@ -249,65 +90,93 @@ class NZBInfoPlayer(MediaPlayer):
                 if status.is_online and "downloading" in status.primary_info.lower():
                     priority_info = f"{status.title}: {status.primary_info}"
                     break
-                elif status.is_online and "queue" in status.primary_info.lower() and "idle" not in status.primary_info.lower():
-                    priority_info = f"{status.title}: {status.primary_info}"
-                    break
-        
-        attrs_to_update.update({
-            Attributes.MEDIA_TITLE: f"NZB Info Manager ({online_count}/{total_count} online)",
-            Attributes.MEDIA_ARTIST: priority_info,
-            Attributes.MEDIA_ALBUM: f"Last updated: {self._format_time_ago()}",
-            Attributes.MEDIA_IMAGE_URL: self._get_icon_base64("system_overview.png")
-        })
 
-    async def _update_app_display_2row(self, source: str, attrs_to_update: dict):
-        """Update display for specific application with 2-row format."""
+        attrs[media_player.Attributes.MEDIA_TITLE] = f"NZB Info Manager ({online}/{total} online)"
+        attrs[media_player.Attributes.MEDIA_ARTIST] = priority_info
+        attrs[media_player.Attributes.MEDIA_IMAGE_URL] = self._get_icon_base64("system_overview.png")
+
+    def _build_app_display(self, source: str, attrs: dict) -> None:
         app_name = self._get_app_name_from_source(source)
         if not app_name:
-            attrs_to_update.update({
-                Attributes.MEDIA_TITLE: "Application not found",
-                Attributes.MEDIA_ARTIST: "Check configuration", 
-                Attributes.MEDIA_ALBUM: "",
-                Attributes.MEDIA_IMAGE_URL: self._get_source_image(source)
-            })
+            attrs[media_player.Attributes.MEDIA_TITLE] = "Application not found"
+            attrs[media_player.Attributes.MEDIA_ARTIST] = "Check configuration"
+            attrs[media_player.Attributes.MEDIA_IMAGE_URL] = self._get_source_image(source)
             return
-        
-        status = self._client.get_app_status(app_name)
-        if not status:
-            attrs_to_update.update({
-                Attributes.MEDIA_TITLE: "Status unavailable",
-                Attributes.MEDIA_ARTIST: "Application not configured",
-                Attributes.MEDIA_ALBUM: "",
-                Attributes.MEDIA_IMAGE_URL: self._get_source_image(source)
-            })
-            return
-        
-        if not status.is_online:
-            row1_value = "Connection Error"
-            row2_value = f"Check {status.title} configuration"
-        else:
-            row1_value = status.primary_info
-            row2_value = status.secondary_info
-        
-        attrs_to_update.update({
-            Attributes.MEDIA_TITLE: row1_value,
-            Attributes.MEDIA_ARTIST: row2_value,
-            Attributes.MEDIA_ALBUM: "",
-            Attributes.MEDIA_IMAGE_URL: self._get_source_image(source)
-        })
 
-    def _format_time_ago(self) -> str:
-        """Format time ago string."""
-        import time
-        
-        now = time.time()
-        diff = max(0, now - (now - 5))
-        
-        if diff < 60:
-            return "just now"
-        elif diff < 3600:
-            minutes = int(diff / 60)
-            return f"{minutes}m ago"
+        status = self._device.get_app_status(app_name)
+        if not status:
+            attrs[media_player.Attributes.MEDIA_TITLE] = "Status unavailable"
+            attrs[media_player.Attributes.MEDIA_ARTIST] = "Application not configured"
+            attrs[media_player.Attributes.MEDIA_IMAGE_URL] = self._get_source_image(source)
+            return
+
+        if not status.is_online:
+            attrs[media_player.Attributes.MEDIA_TITLE] = "Connection Error"
+            attrs[media_player.Attributes.MEDIA_ARTIST] = f"Check {status.title} configuration"
         else:
-            hours = int(diff / 3600)
-            return f"{hours}h ago"
+            attrs[media_player.Attributes.MEDIA_TITLE] = status.primary_info
+            attrs[media_player.Attributes.MEDIA_ARTIST] = status.secondary_info
+
+        attrs[media_player.Attributes.MEDIA_IMAGE_URL] = self._get_source_image(source)
+
+    async def _handle_command(
+        self, entity: Any, cmd_id: str, params: dict[str, Any] | None
+    ) -> StatusCodes:
+        _LOG.debug("Media player command: %s params=%s", cmd_id, params)
+
+        if cmd_id == media_player.Commands.OFF:
+            self.update({media_player.Attributes.STATE: media_player.States.STANDBY})
+            return StatusCodes.OK
+
+        elif cmd_id == media_player.Commands.ON:
+            self.update({media_player.Attributes.STATE: media_player.States.ON})
+            return StatusCodes.OK
+
+        elif cmd_id == media_player.Commands.SELECT_SOURCE:
+            source = params.get("source") if params else None
+            if source:
+                self._device.current_source = source
+                _LOG.info("Switched view to: %s", source)
+                await self._device.poll_device()
+            return StatusCodes.OK
+
+        _LOG.debug("Ignoring unsupported command: %s", cmd_id)
+        return StatusCodes.OK
+
+    def _get_app_name_from_source(self, source: str) -> str:
+        for app_name, info in APP_DISPLAY.items():
+            if info["name"] == source:
+                return app_name
+        return ""
+
+    def _get_source_image(self, source: str) -> str:
+        if source == "System Overview":
+            return self._get_icon_base64("system_overview.png")
+        for app_name, info in APP_DISPLAY.items():
+            if info["name"] == source:
+                return self._get_icon_base64(info["icon"])
+        return self._get_icon_base64("system_overview.png")
+
+    def _get_icon_base64(self, icon_filename: str) -> str:
+        if icon_filename in self._icon_cache:
+            return self._icon_cache[icon_filename]
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(script_dir, "icons", icon_filename)
+
+        if not os.path.exists(icon_path):
+            fallback = os.path.join(script_dir, "icons", "system_overview.png")
+            if os.path.exists(fallback):
+                icon_path = fallback
+            else:
+                return ""
+
+        try:
+            with open(icon_path, "rb") as f:
+                data = base64.b64encode(f.read()).decode("utf-8")
+                result = f"data:image/png;base64,{data}"
+                self._icon_cache[icon_filename] = result
+                return result
+        except Exception as e:
+            _LOG.error("Failed to read icon %s: %s", icon_path, e)
+            return ""

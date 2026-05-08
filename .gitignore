@@ -87,3 +87,18 @@ Thumbs.db
 
 # Integration specific
 artifacts/
+
+# Claude knowledge base (local only, never commit)
+.claude/
+knowledge-base/
+*.knowledge.md
+
+# Testing files (keep local only, never push to repository)
+tests/
+simulator/
+
+# Chat history (never commit)
+chat-history/
+*.chat.md
+auto-save-state.json
+auto-save.log

@@ -1,12 +1,12 @@
 {
     "driver_id": "uc_intg_nzbinfo",
-    "version": "0.1.17",
-    "min_core_api": "0.21.0",
+    "version": "2.0.0",
+    "min_core_api": "0.22.0",
     "name": {
         "en": "NZB Info Manager"
     },
     "description": {
-        "en": "Monitor and control newsgroup applications like SABnzbd, NZBget, Sonarr, Radarr, Lidarr, Readarr, Bazarr, and Overseerr"
+        "en": "Monitor newsgroup applications like SABnzbd, NZBget, Sonarr, Radarr, Lidarr, Readarr, Bazarr, and Overseerr"
     },
     "developer": {
         "name": "Meir Miyara",
@@ -14,7 +14,7 @@
         "url": "https://github.com/mase1981"
     },
     "home_page": "https://github.com/mase1981/uc-intg-nzbinfo",
-    "documentation": "https://github.com/mase1981/uc-intg-nzbinfo/blob/main/README.md",
+    "icon": "uc:download",
     "setup_data_schema": {
         "title": {
             "en": "NZB Media Manager Setup"
@@ -286,12 +286,5 @@
             }
         ]
     },
-    "release_date": "2025-01-20",
-    "icon": "uc:download",
-    "enabled": true,
-    "port": 9091,
-    "mdns": {
-        "name": "NZB Info Manager",
-        "mdns_type": "_uc-integration._tcp.local."
-    }
+    "release_date": "2026-05-08"
 }
